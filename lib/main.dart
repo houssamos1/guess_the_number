@@ -18,6 +18,25 @@ class GuessTheNumberApp extends StatelessWidget {
   }
 }
 
+// Classe pour gérer les scores
+class ScoreManager {
+  static List<int> scores = [];
+
+  // Ajoute un score à la liste et trie pour garder les meilleurs
+  static void addScore(int score) {
+    scores.add(score);
+    scores.sort();
+    if (scores.length > 10) {
+      scores = scores.sublist(0, 10); // Garder les 10 meilleurs scores
+    }
+  }
+
+  // Retourne les 10 meilleurs scores
+  static List<int> getTopScores() {
+    return scores;
+  }
+}
+
 class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -102,23 +121,20 @@ class LevelSelectionPage extends StatelessWidget {
       appBar: AppBar(
         title: Text('Choisissez le Niveau'),
         backgroundColor: Colors.blue,
+        actions: [
+          // Icône d'information en haut à droite
+          IconButton(
+            icon: Icon(Icons.help_outline, color: Colors.white),
+            onPressed: () {
+              _showLevelDescription(context);
+            },
+          ),
+        ],
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Description des niveaux avec pop-up
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
-              ),
-              onPressed: () {
-                _showLevelDescription(context);
-              },
-              child: Text('Description du Niveau'),
-            ),
-            SizedBox(height: 20),
             // Boutons de niveaux
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -208,15 +224,25 @@ class _GamePageState extends State<GamePage> {
   late int _highScore;
   String _feedbackMessage = '';
   int _attempts = 0;
-  late Stopwatch _stopwatch;
+  late DateTime _startTime;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _randomNumber = Random().nextInt(widget.maxNumber) + 1;
+    _generateNewNumber();
     _highScore = 9999;
-    _stopwatch = Stopwatch();
-    _stopwatch.start();
+  }
+
+  // Fonction pour générer un nombre aléatoire en fonction du niveau
+  void _generateNewNumber() {
+    setState(() {
+      _randomNumber = Random().nextInt(widget.maxNumber) + 1;
+      _feedbackMessage = '';
+      _errorMessage = '';
+      _attempts = 0;
+      _startTime = DateTime.now();
+    });
   }
 
   void _checkGuess() {
@@ -225,7 +251,7 @@ class _GamePageState extends State<GamePage> {
 
       // Vérification si la valeur est supérieure au niveau
       if (guess > widget.maxNumber) {
-        _showInputErrorDialog(context);
+        _errorMessage = 'Erreur : Entrez un nombre inférieur ou égal à ${widget.maxNumber}';
         return;
       }
 
@@ -237,36 +263,19 @@ class _GamePageState extends State<GamePage> {
         _feedbackMessage = '🔼'; // Plus petit
       } else {
         _feedbackMessage = '🎉'; // Correct
-        _stopwatch.stop();
-        int score = _stopwatch.elapsed.inSeconds;
+        Duration elapsedTime = DateTime.now().difference(_startTime);
+        int score = elapsedTime.inSeconds;
+
         if (score < _highScore) {
           _highScore = score;
         }
-        // Redirection vers la page de classement
+
+        // Ajoute le score au classement et affiche le message de fin
+        ScoreManager.addScore(score);
         _showGameOverDialog(context, score);
       }
       _controller.clear();
     });
-  }
-
-  void _showInputErrorDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Erreur de saisie'),
-          content: Text('Veuillez entrer un nombre inférieur ou égal à ${widget.maxNumber}.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('Fermer'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _showGameOverDialog(BuildContext context, int score) {
@@ -282,20 +291,12 @@ class _GamePageState extends State<GamePage> {
                 Navigator.of(context).pop();
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => FinalRankingPage(score: score)),
+                  MaterialPageRoute(
+                    builder: (context) => FinalRankingPage(score: score),
+                  ),
                 );
               },
               child: Text('Voir le classement'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => HomePage()),
-                );
-              },
-              child: Text('Retour à l\'accueil'),
             ),
           ],
         );
@@ -310,39 +311,42 @@ class _GamePageState extends State<GamePage> {
       appBar: AppBar(
         title: Text('Devinez le Nombre'),
         backgroundColor: Colors.blue,
+        actions: [
+          // Icône d'information en haut à droite
+          IconButton(
+            icon: Icon(Icons.help_outline, color: Colors.white),
+            onPressed: () {
+              _showLevelDescription(context);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox(height: 20),
-            // Affichage du meilleur score et timer
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '🏆 ${_highScore == 9999 ? "--" : "${_highScore}s"}',
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: Colors.white70,
-                  ),
+            // Message d'erreur
+            if (_errorMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  _errorMessage,
+                  style: TextStyle(color: Colors.red, fontSize: 18),
                 ),
-                Text(
-                  '⏱ ${_stopwatch.elapsed.inSeconds}s',
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
+              ),
+            // Affichage du meilleur score
+            Text(
+              'Meilleur score: ${_highScore}s',
+              style: TextStyle(fontSize: 20, color: Colors.white70),
             ),
-            SizedBox(height: 40),
+            SizedBox(height: 20),
             // Instruction avec emoji
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Icon(Icons.help_outline, color: Colors.white, size: 30),
+                SizedBox(width: 10),
                 Text(
                   'Entrez un nombre entre 1 et ${widget.maxNumber}:',
                   style: TextStyle(
@@ -350,8 +354,6 @@ class _GamePageState extends State<GamePage> {
                     color: Colors.white,
                   ),
                 ),
-                SizedBox(width: 10),
-                Icon(Icons.help_outline, color: Colors.white, size: 30),
               ],
             ),
             SizedBox(height: 20),
@@ -401,6 +403,26 @@ class _GamePageState extends State<GamePage> {
       ),
     );
   }
+
+  void _showLevelDescription(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Description du Niveau'),
+          content: Text('Choisissez un niveau de difficulté:\n1-10: Facile\n1-50: Moyen\n1-100: Difficile'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Fermer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class FinalRankingPage extends StatelessWidget {
@@ -425,12 +447,21 @@ class FinalRankingPage extends StatelessWidget {
               style: TextStyle(fontSize: 24, color: Colors.white),
             ),
             SizedBox(height: 20),
-            // Affichage des meilleurs scores (fictifs ici)
+            // Affichage des meilleurs scores dynamiques
             Text(
-              'Top 10 des scores :\n1. 10s\n2. 12s\n3. 15s\n4. 20s\n5. 22s\n6. 30s\n7. 35s\n8. 40s\n9. 45s\n10. 50s',
-              style: TextStyle(fontSize: 18, color: Colors.white70),
-              textAlign: TextAlign.center,
+              'Top 10 des scores :',
+              style: TextStyle(fontSize: 20, color: Colors.white),
             ),
+            SizedBox(height: 10),
+            // Liste des scores
+            ...ScoreManager.getTopScores().asMap().entries.map((entry) {
+              int rank = entry.key + 1;
+              int score = entry.value;
+              return Text(
+                '$rank. $score secondes',
+                style: TextStyle(fontSize: 18, color: Colors.white70),
+              );
+            }).toList(),
             SizedBox(height: 20),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
